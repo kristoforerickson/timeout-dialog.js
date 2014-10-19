@@ -52,9 +52,11 @@ String.prototype.format = function() {
       question: 'Do you want to stay signed in?',
       keep_alive_button_text: 'Yes, Keep me signed in',
       sign_out_button_text: 'No, Sign me out',
-      keep_alive_url: '/keep-alive',
+      keep_alive_url: '',
+	  keep_alive_function: function() {},
       logout_url: null,
       logout_redirect_url: '/',
+	  logout_function: function() {},
       restart_on_yes: true,
       dialog_width: 350
     }    
@@ -141,21 +143,27 @@ String.prototype.format = function() {
         this.destroyDialog();
         window.clearInterval(this.countdown);
 
-        $.get(settings.keep_alive_url, function(data) {
-          if (data == "OK") {
-            if (settings.restart_on_yes) {
-              self.setupDialogTimer();
-            }
-          }
-          else {
-            self.signOut(false);
-          }
-        });
+		settings.keep_alive_function();
+
+		if (settings.keep_alive_url !== '') {
+			$.get(settings.keep_alive_url, function(data) {
+			  if (data == "OK") {
+				if (settings.restart_on_yes) {
+				  self.setupDialogTimer();
+				}
+			  }
+			  else {
+				self.signOut(false);
+			  }
+			});
+		}
       },
 
       signOut: function(is_forced) {
         var self = this;
         this.destroyDialog();
+
+		settings.logout_function(is_forced);
 
         if (settings.logout_url != null) {
             $.post(settings.logout_url, function(data){
