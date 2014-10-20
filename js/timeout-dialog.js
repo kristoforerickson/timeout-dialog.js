@@ -146,7 +146,7 @@ String.prototype.format = function() {
 
 			if (this.settings.keep_alive_url !== '') {
 				$.get(this.settings.keep_alive_url, function(data) {
-					if (data == "OK") {
+					if (data === "OK") {
 						if (this.settings.restart_on_yes) {
 							self.setupDialogTimer();
 						}
@@ -163,7 +163,7 @@ String.prototype.format = function() {
 
 			this.settings.logout_function(is_forced);
 
-			if (this.settings.logout_url != null) {
+			if (this.settings.logout_url !== null) {
 				$.post(this.settings.logout_url, function(data) {
 					self.redirectLogout(is_forced);
 				});
