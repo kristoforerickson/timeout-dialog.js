@@ -1,180 +1,131 @@
-/*
- * timeout-dialog.js v1.0.1, 01-03-2012
- * 
- * @author: Rodrigo Neri (@rigoneri)
- * 
- * (The MIT License)
- * 
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- * 
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
- * 
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
- * THE SOFTWARE. 
- */
+String.prototype.format = function () {
+    var s = this,
+        i = arguments.length;
 
-
-/* String formatting, you might want to remove this if you already use it.
- * Example:
- * 
- * var location = 'World';
- * alert('Hello {0}'.format(location));
- */
-String.prototype.format = function() {
-  var s = this,
-      i = arguments.length;
-
-  while (i--) {
-    s = s.replace(new RegExp('\\{' + i + '\\}', 'gm'), arguments[i]);
-  }
-  return s;
+    while (i--) {
+        s = s.replace(new RegExp('\\{' + i + '\\}', 'gm'), arguments[i]);
+    }
+    return s;
 };
 
-!function($) {
-  $.timeoutDialog = function(options) {
+const pluralize = (count, noun, suffix = 's') =>
+    `${count} ${noun}${count !== 1 ? suffix : ''}`;
 
-    var settings = {
-      timeout: 1200,
-      countdown: 60,
-      title : 'Your session is about to expire!',
-      message : 'You will be logged out in {0} seconds.',
-      question: 'Do you want to stay signed in?',
-      keep_alive_button_text: 'Yes, Keep me signed in',
-      sign_out_button_text: 'No, Sign me out',
-      keep_alive_url: '/keep-alive',
-      logout_url: null,
-      logout_redirect_url: '/',
-      restart_on_yes: true,
-      dialog_width: 350
-    }    
-
-    $.extend(settings, options);
-
-    var TimeoutDialog = {
-      init: function () {
-        this.setupDialogTimer();
-      }, 
-
-      setupDialogTimer: function() {
-        var self = this;
-        window.setTimeout(function() {
-           self.setupDialog();
-        }, (settings.timeout - settings.countdown) * 1000);
-      },
-
-      setupDialog: function() {
-        var self = this;
-        self.destroyDialog();
-
-        $('<div id="timeout-dialog">' +
-            '<p id="timeout-message">' + settings.message.format('<span id="timeout-countdown">' + settings.countdown + '</span>') + '</p>' + 
-            '<p id="timeout-question">' + settings.question + '</p>' +
-          '</div>')
-        .appendTo('body')
-        .dialog({
-          modal: true,
-          width: settings.dialog_width,
-          minHeight: 'auto',
-          zIndex: 10000,
-          closeOnEscape: false,
-          draggable: false,
-          resizable: false,
-          dialogClass: 'timeout-dialog',
-          title: settings.title,
-          buttons : {
-            'keep-alive-button' : { 
-              text: settings.keep_alive_button_text,
-              id: "timeout-keep-signin-btn",
-              click: function() {
-                self.keepAlive();
-              }
-            },
-            'sign-out-button' : {
-              text: settings.sign_out_button_text,
-              id: "timeout-sign-out-button",
-              click: function() {
-                self.signOut(true);
-              }
+!function ($) {
+    $.timeoutDialog = {
+        settings: {
+            timeout: 1800,
+            countdown: 300,
+            keep_alive_url: '',
+            logout_redirect_url: '/'
+        },
+        alertSetTimeoutHandle: 0,
+        setupDialogTimer: function (options) {
+            if (options !== undefined) {
+                $.extend(this.settings, options);
             }
-          }
-        });
 
-        self.startCountdown();
-      },
+            var self = this;
 
-      destroyDialog: function() {
-        if ($("#timeout-dialog").length) {
-          $(this).dialog("close");
-          $('#timeout-dialog').remove();
-        }
-      },
-
-      startCountdown: function() {
-        var self = this,
-            counter = settings.countdown;
-
-        this.countdown = window.setInterval(function() {
-          counter -= 1;
-          $("#timeout-countdown").html(counter);
-
-          if (counter <= 0) {
-            window.clearInterval(self.countdown);
-            self.signOut(false);
-          }
-
-        }, 1000);
-      },
-
-      keepAlive: function() {
-        var self = this;
-        this.destroyDialog();
-        window.clearInterval(this.countdown);
-
-        $.get(settings.keep_alive_url, function(data) {
-          if (data == "OK") {
-            if (settings.restart_on_yes) {
-              self.setupDialogTimer();
+            if (self.alertSetTimeoutHandle !== 0) {
+                clearTimeout(self.alertSetTimeoutHandle);
             }
-          }
-          else {
-            self.signOut(false);
-          }
-        });
-      },
 
-      signOut: function(is_forced) {
-        var self = this;
-        this.destroyDialog();
+            self.alertSetTimeoutHandle = window.setTimeout(function () {
+                self.setupDialog();
+            }, (this.settings.timeout - this.settings.countdown) * 1000);
+        },
+        setupDialog: function () {
+            var self = this;
+            self.destroyDialog();
 
-        if (settings.logout_url != null) {
-            $.post(settings.logout_url, function(data){
-                self.redirectLogout(is_forced);
+            $('<div class="modal" id="timeout-modal">' +
+                '<div class="modal-dialog">' +
+                    '<div class="modal-content">' +
+                        '<div class="modal-header">Session Timeout</div>' +
+                        '<div class="modal-body">' +
+                            '<p id="timeout-message">Due to inactivity, your session will timeout in <span id="timeout-countdown">' + this.settings.countdown + ' seconds</span>.</p>' +
+                        '</div>' +
+                        '<div class="modal-footer">' +
+                            '<div class="button prime skinny" id="timeoutKeepAliveBtn">Extend My Session</div>' +
+                            '<div class="button secondary skinny" id="timeoutLogoutBtn">Logout Now</div>' +
+                        '</div>' +
+                    '</div>' +
+                '</div>' +
+            '</div>')
+            .appendTo('body')
+            .modal({
+                backdrop: 'static',
+                keyboard: false
             });
-        }
-        else {
+
+            $(document).on('click', '#timeoutKeepAliveBtn', function () {
+                self.keepAlive();
+            });
+
+            $(document).on('click', '#timeoutLogoutBtn', function () {
+                self.signOut(true);
+            });
+
+            self.startCountdown();
+        },
+        destroyDialog: function () {
+            if ($("#timeout-modal").length) {
+                $("#timeout-modal").modal("hide");
+                $('#timeout-modal').remove();
+            }
+        },
+        startCountdown: function () {
+            var self = this,
+                counter = this.settings.countdown;
+
+            this.countdown = window.setInterval(function () {
+                counter -= 1;
+                var counterMessage = '';
+                if (counter >= 60) {
+                    var minutes = counter / 60;
+                    var seconds = counter % 60; 
+
+                    counterMessage = `${minutes} ${pluralize('minute')} ${seconds} ${pluralize('second')}`;
+                } else {
+                    counterMessage = counter + ' seconds';
+                }
+
+                $("#timeout-countdown").html(counterMessage);
+
+                if (counter <= 0) {
+                    window.clearInterval(self.countdown);
+                    self.signOut(true);
+                }
+
+            }, 1000);
+        },
+        keepAlive: function () {
+            var self = this;
+            this.destroyDialog();
+            window.clearInterval(this.countdown);
+            
+            if (this.settings.keep_alive_url !== '') {
+                $.get(this.settings.keep_alive_url, function (data) {
+                    if (data === "OK") {
+                        self.setupDialogTimer();
+                    } else {
+                        self.signOut(false);
+                    }
+                });
+            }
+        },
+        signOut: function (is_forced) {
+            var self = this;
+            this.destroyDialog();
+
             self.redirectLogout(is_forced);
+        },
+        redirectLogout: function (is_forced) {
+            var target = this.settings.logout_redirect_url + '?next=' + encodeURIComponent(window.location.pathname + window.location.search);
+            if (!is_forced)
+                target += '&timeout=t';
+            window.location = target;
         }
-      }, 
-
-      redirectLogout: function(is_forced){
-        var target = settings.logout_redirect_url + '?next=' + encodeURIComponent(window.location.pathname + window.location.search);
-        if (!is_forced)
-          target += '&timeout=t';
-        window.location = target;
-      }
     };
-
-    TimeoutDialog.init();
-  };
 }(window.jQuery);
